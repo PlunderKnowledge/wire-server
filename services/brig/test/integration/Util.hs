@@ -82,7 +82,7 @@ randomUser brig = do
 
 createUser :: Text -> Text -> Brig -> Http User
 createUser name email brig = do
-    r <- postUser name email Nothing brig <!! const 201 === statusCode
+    r <- postUser name email Nothing Nothing brig <!! const 201 === statusCode
     return $ fromMaybe (error "createUser: failed to parse response") (decodeBody r)
 
 createAnonUser :: Text -> Brig -> Http User
@@ -137,8 +137,8 @@ getConnection brig from to = get $ brig
     . zConn "conn"
 
 -- TODO: createUser
-postUser :: Text -> Text -> Maybe InvitationCode -> Brig -> Http ResponseLBS
-postUser name email invCode brig = do
+postUser :: Text -> Text -> Maybe InvitationCode -> Maybe UserSSOId -> Brig -> Http ResponseLBS
+postUser name email invCode ssoid brig = do
     e <- mkEmail email
     let p = RequestBodyLBS . encode $ object
             [ "name"            .= name
@@ -146,6 +146,7 @@ postUser name email invCode brig = do
             , "password"        .= defPassword
             , "invitation_code" .= invCode
             , "cookie"          .= defCookieLabel
+            , "ssoid"           .= ssoid
             ]
     post (brig . path "/i/users" . contentJson . body p)
 
