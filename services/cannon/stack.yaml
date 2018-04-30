@@ -13,5 +13,4 @@ flags:
     arbitrary: True
 extra-deps:
 - data-timeout-0.3
-- QuickCheck-2.9.2
 extra-package-dbs: []
