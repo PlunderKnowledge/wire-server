@@ -10,11 +10,11 @@ init:
 
 .PHONY: install
 install: init
-	stack install --pedantic --test --local-bin-path=dist
+	stack install --pedantic --test --no-run-tests --local-bin-path=dist
 
 .PHONY: fast
 fast: init
-	stack install --pedantic --test --local-bin-path=dist --fast
+	stack install --pedantic --test --no-run-tests --local-bin-path=dist --fast
 
 .PHONY: clean
 clean:
