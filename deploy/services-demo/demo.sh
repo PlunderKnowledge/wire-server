@@ -35,7 +35,7 @@ function kill_gracefully() {
 trap "kill_gracefully; kill_all" INT TERM ERR
 
 function check_secrets() {
-    test -f ${DIR}/../dist/zauth || { echo "zauth is not compiled. How about you run 'cd ${TOP_LEVEL} && make services' first?"; exit 1; }
+    test -f ${DIR}/../dist/zauth || { echo "zauth is not compiled. How about you run 'cd ${TOP_LEVEL} && make services-local' first?"; exit 1; }
     
     if [[ ! -f ${SCRIPT_DIR}/resources/turn/secret.txt ]]; then
         echo "Generate a secret for the TURN servers (must match the turn.secret key in brig's config)..."
@@ -66,7 +66,7 @@ function check_prerequisites() {
         && test -f ${DIR}/../dist/cargohold \
         && test -f ${DIR}/../dist/proxy \
         && test -f ${DIR}/../dist/nginx \
-        || { echo "Not all services are compiled. How about you run 'cd ${TOP_LEVEL} && make services' first?"; exit 1; }
+        || { echo "Not all services are compiled. How about you run 'cd ${TOP_LEVEL} && make services-local' first?"; exit 1; }
 }
 
 blue=6
@@ -88,7 +88,7 @@ function run_haskell_service() {
 
 function run_nginz() {
     colour=$1
-    (cd ${SCRIPT_DIR} && ${DIR}/../dist/nginx -p ${SCRIPT_DIR} -c ${SCRIPT_DIR}/conf/nginz/nginx.conf -g 'daemon off;' || kill_all) \
+    (cd ${SCRIPT_DIR} && LD_LIBRARY_PATH=$LD_LIBRARY_PATH:${HOME}/.wire-dev/lib/lib/ ${DIR}/../dist/nginx -p ${SCRIPT_DIR} -c ${SCRIPT_DIR}/conf/nginz/nginx.conf -g 'daemon off;' || kill_all) \
         | sed -e "s/^/$(tput setaf ${colour})[nginz] /" -e "s/$/$(tput sgr0)/" &
 }
 

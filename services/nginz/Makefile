@@ -21,6 +21,7 @@ PID_PATH       ?= /var/run
 # You may need to use this if you have some dependencies in non-standard locations
 EXTRA_CC_INC   ?=
 EXTRA_CC_LIB   ?=
+EXTRA_PKG_PATH ?=
 
 CONFIG_OPTIONS = \
 	--prefix=$(DEST_PATH) \
@@ -61,7 +62,7 @@ dist: guard-NGINZ_VERSION $(DIST)/$(DEB)
 
 $(BIN): src zwagger-ui/swagger-ui
 	git submodule update --init
-	(cd src; ./configure $(CONFIG_OPTIONS) $(ADDITIONAL_MODULES))
+	(cd src; PKG_CONFIG_PATH=$(EXTRA_PKG_PATH) ./configure $(CONFIG_OPTIONS) $(ADDITIONAL_MODULES))
 	make -C src
 
 %.deb: $(BIN) $(DIST)

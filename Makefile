@@ -20,12 +20,18 @@ fast: init
 clean:
 	stack clean
 	$(MAKE) -C services/nginz clean
+	$(MAKE) -C libs/libzauth clean
 	-rm -rf dist
 	-rm -f .metadata
 
 .PHONY: services
-services: init install
+services: init libzauth install
 	$(MAKE) -C services/nginz
+
+# Like 'services' but installs libzauth in home directory
+.PHONY: services-local
+services-local: init libzauth-local install
+	$(MAKE) -C services/nginz EXTRA_PKG_PATH="$(HOME)/.wire-dev/lib/lib/pkgconfig/"
 
 .PHONY: integration
 integration: fast
@@ -71,3 +77,12 @@ docker-exe-%:
 .PHONY: docker-service-%
 docker-service-%:
 	$(MAKE) -C services/"$*" docker
+
+#################################
+## dependencies
+
+libzauth:
+	$(MAKE) -C libs/libzauth install
+
+libzauth-local:
+	$(MAKE) -C libs/libzauth install PREFIX="$(HOME)/.wire-dev/lib"

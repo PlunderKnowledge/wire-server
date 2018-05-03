@@ -25,6 +25,7 @@ build-release:
 	cargo build --release
 
 install: build-release
+	mkdir -p $(PREFIX)/include
 	mkdir -p $(PREFIX)/lib/pkgconfig
 	cp src/zauth.h $(PREFIX)/include/
 	sed -e "s~<<VERSION>>~$(VERSION)~" \
