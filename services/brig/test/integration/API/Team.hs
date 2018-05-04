@@ -550,13 +550,13 @@ testCreateUserInternalSSO brig galley = do
         getUserSSOId _ = Nothing
 
     -- creating users requires both sso_id and team_id
-    postUser "dummy" "success@simulator.amazonses.com" Nothing (Just ssoid) Nothing brig
+    postUser "dummy" (Just "success@simulator.amazonses.com") Nothing (Just ssoid) Nothing brig
         !!! const 400 === statusCode
-    postUser "dummy" "success@simulator.amazonses.com" Nothing Nothing (Just teamid) brig
+    postUser "dummy" (Just "success@simulator.amazonses.com") Nothing Nothing (Just teamid) brig
         !!! const 400 === statusCode
 
     -- creating user with sso_id, team_id is ok
-    resp <- postUser "dummy" "success@simulator.amazonses.com" Nothing (Just ssoid) (Just teamid) brig <!! do
+    resp <- postUser "dummy" (Just "success@simulator.amazonses.com") Nothing (Just ssoid) (Just teamid) brig <!! do
         const 201 === statusCode
         const (Just want) === (getUserSSOId <=< userIdentity . selfUser <=< decodeBody)
 
@@ -576,91 +576,37 @@ testCreateUserInternalSSO brig galley = do
     isact <- isActivatedUser uid brig
     liftIO $ assertBool "user not activated" isact
 
+-- | See also: 'testDeleteTeamUser'.
 testDeleteUserSSO :: Brig -> Galley -> Http ()
 testDeleteUserSSO brig galley = do
     (creator, tid) <- createUserWithTeam brig galley
+    let ssoid = UserSSOId "***"
+        mkuser :: Bool -> Http (Maybe User)
+        mkuser withemail = decodeBody <$>
+            (postUser "dummy" email Nothing (Just ssoid) (Just tid) brig
+             <!! const 201 === statusCode)
+          where
+            email = if withemail then Just "success@simulator.amazonses.com" else Nothing
 
-    let ssoid = UserSSOId "idpUUID:userUUID"
-        mkuser = decodeBody <$>
-                 (postUser "dummy" "success@simulator.amazonses.com" Nothing (Just ssoid) (Just tid) brig
-                  <!! do const 201 === statusCode)
-
-    -- create and delete sso user
-    Just user1 <- mkuser
-    -- deleteUserInternal (userId user1) brig !!! const 202 === statusCode
+    -- create and delete sso user (with email)
+    Just user1 <- mkuser True
     deleteUser (userId user1) (Just defPassword) brig !!! const 200 === statusCode
 
     -- create sso user with email, delete owner, delete user
-    Just user2 <- mkuser
-    -- deleteUserInternal creator brig !!! const 202 === statusCode
-    -- deleteUserInternal (userId user2) brig !!! const 403 === statusCode
-
+    Just user2 <- mkuser True
     deleteUser creator (Just defPassword) brig !!! const 200 === statusCode
     deleteUser (userId user2) (Just defPassword) brig !!! const 403 === statusCode
 
+    -- create sso user without email, delete owner
+    Just _ <- mkuser False
+    deleteUser creator (Just defPassword) brig !!! const 403 === statusCode
 
-
-{-
-
-    -- delete via self vs. delete via /i/users/:id: test both!
-
-    -- test both with and without email address.
-
-
--- , test m "delete /i/self - 200 (ensure no orphan teams)"       $ testDeleteSelfSSO b g
--- , test m "delete /i/users/:id - 202 (ensure no orphan teams)"  $ testDeleteInternalSSO b g
--- run into the remaining 'undefined'!
--- provide mock sso service.  (we'll need a name for that now.)
--- if the mock sso service disagrees with the deletion: 403 "sso-not-allowed" or something
--- if user is last remaining owner: 403 "no-other-owner" (as above).
--- otherwise: 200.
-
-
-
-    teamid <- snd <$> createUserWithTeam brig galley
-    let ssoid = UserSSOId "***"
-    user :: User
-         <- decodeBody <$> (postUser "dummy" "success@simulator.amazonses.com"
-                               Nothing (Just ssoid) (Just teamid) brig
-                               <!! const 201 === statusCode)
-
-
-
-    -- Cannot delete the user since it will make the team orphan
-    deleteUser creator (Just defPassword) brig !!! do
-        const 403 === statusCode
-        const (Just "no-other-owner") === fmap Error.label . decodeBody
-    -- We need to invite another user to a full permission member
-    invitee <- userId <$> inviteAndRegisterUser creator tid brig
-    -- Still cannot delete, need to make this a full permission member
-    deleteUser creator (Just defPassword) brig !!! do
-        const 403 === statusCode
-        const (Just "no-other-owner") === fmap Error.label . decodeBody
-    -- Let's promote the other user
-    updatePermissions creator tid (invitee, Team.fullPermissions) galley
-    -- Now the creator can delete the account
-    deleteUser creator (Just defPassword) brig !!! const 200 === statusCode
-    -- The new full permission member cannot
-    deleteUser invitee (Just defPassword) brig !!! const 403 === statusCode
-    -- We can still invite new users who can delete their account, regardless of status
-    inviteeFull <- userId <$> inviteAndRegisterUser invitee tid brig
-    updatePermissions invitee tid (inviteeFull, Team.fullPermissions) galley
-    deleteUser inviteeFull (Just defPassword) brig !!! const 200 === statusCode
-
-    inviteeMember <- userId <$> inviteAndRegisterUser invitee tid brig
-    deleteUser inviteeMember (Just defPassword) brig !!! const 200 === statusCode
-
-    deleteUser invitee (Just defPassword) brig !!! do
-        const 403 === statusCode
-        const (Just "no-other-owner") === fmap Error.label . decodeBody
-    -- Ensure internal endpoints are also exercised
-    deleteUserInternal invitee brig !!! const 202 === statusCode
-    -- Eventually the user will be deleted, leaving the team orphan
-    void $ retryWhileN 20 (/= Deleted) (getStatus brig invitee)
-    chkStatus brig invitee Deleted
-
--}
-
+    -- TODO:
+    -- run into the remaining 'undefined'!
+    -- provide mock sso service.  (we'll need a name for that now.)
+    -- if the mock sso service disagrees with the deletion: 403 "sso-not-allowed" or something
+    -- if user is last remaining owner: 403 "no-other-owner" (as above).
+    -- otherwise: 2xx.
 
 -------------------------------------------------------------------------------
 -- Utilities
