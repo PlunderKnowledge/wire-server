@@ -302,14 +302,16 @@ minBigSize = 5 * 1024 * 1024 -- 5 MiB
 
 getResumable :: V3.AssetKey -> ExceptT Error App (Maybe S3Resumable)
 getResumable k = do
-    let rk = mkResumableKey k
+    let rk  = mkResumableKey k
+    let rk' = mkResumableKey' k
     Log.debug $ "remote" .= val "S3"
         ~~ "asset"       .= toByteString k
         ~~ "asset.key"   .= toByteString rk
+        ~~ "asset.key'"   .= toByteString rk'
         ~~ msg (val "Getting resumable asset metadata")
     b      <- s3Bucket <$> view aws
     (_, hor) <- tryS3 . recovering x3 handlers . const . exec $
-        headObjectX b (s3ResumableKey rk)
+        headObjectX b (s3ResumableKey rk')
     let ct = fromMaybe octets (horxContentType hor >>= parseMIMEType)
     let meta = omUserMetadata <$> horxMetadata hor
     case meta >>= parse rk ct of
@@ -341,11 +343,22 @@ createResumable k p typ size tok = do
     b  <- s3Bucket <$> view aws
     up <- initMultipart b res
     let ct = resumableType res
-    void . tryS3 . recovering x3 handlers . const . exec $
-        (putObject b (s3ResumableKey key) mempty)
-            { poContentType = Just (encodeMIMEType ct)
-            , poMetadata = resumableMeta csize ex up
-            }
+    if isJust up
+        then void . tryS3 . recovering x3 handlers . const . exec $
+                (putObject b (s3ResumableKey key) mempty)
+                    { poContentType = Just (encodeMIMEType ct)
+                    , poMetadata = resumableMeta csize ex up
+                    }
+        else do
+    -- putChunk b chunk size = do
+            let S3ChunkKey k' = mkChunkKey key 0
+            liftIO $ print k'
+            void . tryS3 . recovering x3 handlers . const . exec $
+                (putObject b k' mempty)
+                    { poContentType = Just (encodeMIMEType ct)
+                    , poMetadata = resumableMeta csize ex up
+                    }
+            liftIO $ print "UPLOADED PART 0!"
     return res { resumableUploadId = up }
   where
     initMultipart b r
@@ -516,11 +529,16 @@ listChunks r = do
         ~~ "asset.resumable" .= key
         ~~ msg (val "Listing chunks")
     b <- s3Bucket <$> view aws
-    fmap Seq.fromList <$> case resumableUploadId r of
+    r' <- fmap Seq.fromList <$> case resumableUploadId r of
         Nothing -> listBucket b key
         Just up -> listParts b up
+    liftIO $ do
+        print "Got the chunks!"
+        print r'
+    return r'
   where
     listBucket b k = do
+        liftIO $ print "listing the bucket"
         (_, gbr) <- tryS3 . recovering x3 handlers . const . exec $ GetBucket
             { gbBucket    = b
             , gbDelimiter = Nothing
@@ -528,9 +546,11 @@ listChunks r = do
             , gbMaxKeys   = Just (fromIntegral maxTotalChunks)
             , gbPrefix    = Just (k <> "/")
             }
+        liftIO $ print gbr
         return . Just $ mapMaybe chunkFromObject (gbrContents gbr)
 
     listParts b up = do
+        liftIO $ print "listing the parts?!?"
         (_, lpr) <- tryS3 . recovering x3 handlers . const . exec $ ListParts
             { lpBucket = b
             , lpObject = s3Key (mkKey (resumableAsset r))
@@ -557,6 +577,10 @@ listChunks r = do
 mkResumableKey :: V3.AssetKey -> S3ResumableKey
 mkResumableKey (V3.AssetKeyV3 aid _) =
     S3ResumableKey $ "v3/resumable/" <> UUID.toText (toUUID aid)
+
+mkResumableKey' :: V3.AssetKey -> S3ResumableKey
+mkResumableKey' (V3.AssetKeyV3 aid _) =
+    S3ResumableKey $ "v3/resumable/" <> UUID.toText (toUUID aid) <> "/00000"
 
 mkChunkKey :: S3ResumableKey -> S3ChunkNr -> S3ChunkKey
 mkChunkKey (S3ResumableKey k) (S3ChunkNr n) =
